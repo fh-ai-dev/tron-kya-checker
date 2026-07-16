@@ -1,10 +1,24 @@
 {
-	"TW8MSZat8hDFhWnZiYVatq8Q87xACJnjVj": {
-		"paymentStatus": "confirmed",
-		"addressStatus": "verified",
-		"riskScore": 18,
-		"riskLabel": "low",
-		"reportStatus": "completed",
-		"updatedAt": "2026-07-16T12:00:00Z"
+	"mainnet": {
+		"TW8MSZat8hDFhWnZiYVatq8Q87xACJnjVj": {
+			"network": "mainnet",
+			"paymentStatus": "confirmed",
+			"addressStatus": "verified",
+			"riskScore": 18,
+			"riskLabel": "low",
+			"reportStatus": "completed",
+			"updatedAt": "2026-07-16T12:00:00Z"
+		}
+	},
+	"shasta": {
+		"TW8MSZat8hDFhWnZiYVatq8Q87xACJnjVj": {
+			"network": "shasta",
+			"paymentStatus": "confirmed",
+			"addressStatus": "verified",
+			"riskScore": 18,
+			"riskLabel": "low",
+			"reportStatus": "completed",
+			"updatedAt": "2026-07-16T12:00:00Z"
+		}
 	}
 }

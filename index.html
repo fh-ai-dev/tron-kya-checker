@@ -36,6 +36,7 @@
 		.brand { display: flex; gap: 12px; align-items: center; font-weight: 700; letter-spacing: .03em; }
 		.brand-mark { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; background: var(--green); color: var(--lime); font-size: 19px; }
 		.network { color: var(--green); border: 1px solid #b5cdbd; border-radius: 100px; padding: 8px 13px; font: 700 12px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .08em; text-transform: uppercase; }
+		.testnet-banner { margin: 0 0 22px; padding: 13px 16px; border: 1px solid #f2b1a1; border-radius: 10px; background: #fff0ec; color: #9d301c; font: 700 13px/1.4 ui-sans-serif, system-ui, sans-serif; }
 		main { padding-bottom: 70px; }
 		.hero { display: grid; grid-template-columns: 1.15fr .85fr; gap: 30px; align-items: end; margin: 24px 0 46px; }
 		h1 { max-width: 690px; margin: 0; font-size: clamp(48px, 7vw, 88px); line-height: .92; letter-spacing: -.045em; font-weight: 700; }
@@ -97,10 +98,11 @@
 	<div class="shell">
 		<header>
 			<div class="brand"><span class="brand-mark">T</span><span>KYA / CHECKER</span></div>
-			<span class="network">TRON mainnet</span>
+			<span class="network" id="network-badge">TRON mainnet</span>
 		</header>
 
 		<main>
+			<div class="testnet-banner" id="testnet-banner" role="alert" hidden>WARNING: You are connected to the TRON Shasta testnet. Test TRX has no mainnet value.</div>
 			<section class="hero">
 				<h1>Verify the<br><em>address.</em></h1>
 				<p class="hero-copy">A wallet-gated TRON payment flow for manual KYA review. Connect your wallet to begin and keep your payment traceable from confirmation to final risk result.</p>
@@ -118,7 +120,7 @@
 					<div class="amount"><strong>10</strong><span>TRX</span></div>
 					<div class="address-box"><span class="sr-only">Deposit address</span><code id="deposit-address">Not configured</code></div>
 					<button class="button" id="pay-button" type="button" disabled>Connect wallet first</button>
-					<p class="form-note">Payment is checked on TRON mainnet and requires 12 confirmed blocks before review begins.</p>
+					<p class="form-note">Payment is checked on the active TRON network and requires 12 confirmed blocks before review begins.</p>
 				</article>
 
 				<article class="panel section status-card">
@@ -145,15 +147,29 @@
 
 		const CONFIG = Object.freeze({
 			DEPOSIT_ADDRESS: 'TRAHJie9pmZvc54mvrNH7pmhWLqgvzSys9',
+			SHASTA_DEPOSIT_ADDRESS: 'TRAHJie9pmZvc54mvrNH7pmhWLqgvzSys9',
 			PAYMENT_SUN: 10_000_000,
 			REQUIRED_CONFIRMATIONS: 12,
 			RESULTS_URL: './data/results.json',
 			TRONGRID_URL: 'https://api.trongrid.io'
 		});
 
-		const state = { wallet: '', transactionId: '', transactionBlock: 0, pollTimer: 0, results: null };
+		const state = { wallet: '', transactionId: '', transactionBlock: 0, pollTimer: 0, results: null, network: null };
 		const $ = (id) => document.getElementById(id);
-		const isConfigured = () => /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(CONFIG.DEPOSIT_ADDRESS);
+		const isConfigured = () => Boolean(state.network?.depositAddress && /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(state.network.depositAddress));
+
+		function getNetwork(tronWeb) {
+			const host = String(tronWeb?.fullNode?.host || '').toLowerCase();
+			if (host.includes('shasta')) return { key: 'shasta', label: 'SHASTA testnet', apiUrl: 'https://api.shasta.trongrid.io', depositAddress: CONFIG.SHASTA_DEPOSIT_ADDRESS };
+			if (host.includes('api.trongrid.io') || host.includes('api.tronstack.io')) return { key: 'mainnet', label: 'TRON mainnet', apiUrl: CONFIG.TRONGRID_URL, depositAddress: CONFIG.DEPOSIT_ADDRESS };
+			return null;
+		}
+
+		function updateNetworkUI(network) {
+			$('network-badge').textContent = network.label;
+			$('testnet-banner').hidden = network.key !== 'shasta';
+			$('deposit-address').textContent = network.depositAddress || 'Testnet address required';
+		}
 
 		function showToast(message) {
 			const toast = $('toast');
@@ -194,11 +210,6 @@
 			});
 		}
 
-		function isMainnet(tronWeb) {
-			const host = String(tronWeb?.fullNode?.host || '').toLowerCase();
-			return host.includes('api.trongrid.io') || host.includes('api.tronstack.io');
-		}
-
 		async function connectWallet() {
 			try {
 				const injectedTronWeb = await waitForTronLink();
@@ -209,17 +220,20 @@
 				const tronWeb = getTronWeb();
 				const address = tronWeb?.defaultAddress?.base58;
 				if (!address) throw new Error('No active wallet address was returned.');
-				if (!isMainnet(tronWeb)) throw new Error('Switch TronLink to TRON mainnet before continuing.');
+				const network = getNetwork(tronWeb);
+				if (!network) throw new Error('Unsupported TRON network. Switch TronLink to TRON mainnet or Shasta testnet.');
 				state.wallet = address;
+				state.network = network;
+				updateNetworkUI(network);
 				$('wallet-dot').classList.add('live');
 				$('wallet-state').textContent = 'Wallet connected';
 				$('wallet-address').textContent = address;
 				$('connect-button').textContent = 'Wallet connected';
 				$('pay-button').disabled = !isConfigured();
-				$('pay-button').textContent = isConfigured() ? 'Pay 10 TRX' : 'Receiving address not configured';
+				$('pay-button').textContent = isConfigured() ? 'Pay 10 TRX' : 'Testnet address not configured';
 				setStatus('address-status', 'Ready', 'good');
 				setStatus('report-status', 'Awaiting payment');
-				$('status-message').textContent = isConfigured() ? 'Send 10 TRX to start the confirmation check.' : 'The receiving address must be configured by the operator before payment is enabled.';
+				$('status-message').textContent = isConfigured() ? 'Send 10 TRX to start the confirmation check.' : 'The receiving address for this network must be configured before payment is enabled.';
 				await loadResults();
 				await findExistingPayment();
 				renderResult();
@@ -240,10 +254,11 @@
 
 		function renderResult() {
 			if (!state.wallet || !state.results) return;
-			const record = state.results[state.wallet];
-			if (!record) {
+			const networkResults = state.results[state.network?.key] || {};
+			const record = networkResults[state.wallet];
+			if (!record || (record.network || 'mainnet') !== state.network?.key) {
 				$('result-panel').hidden = true;
-				if (!state.transactionId) $('status-message').textContent = 'No manual KYA result is available for this wallet yet.';
+				if (!state.transactionId) $('status-message').textContent = state.network?.key === 'shasta' ? 'Mainnet KYA results are hidden while using the Shasta testnet.' : 'No manual KYA result is available for this wallet yet.';
 				return;
 			}
 			$('result-panel').hidden = false;
@@ -255,7 +270,7 @@
 		}
 
 		async function fetchJson(path, options) {
-			const response = await fetch(CONFIG.TRONGRID_URL + path, options);
+			const response = await fetch((state.network?.apiUrl || CONFIG.TRONGRID_URL) + path, options);
 			if (!response.ok) throw new Error('TRON network request failed.');
 			return response.json();
 		}
@@ -266,14 +281,14 @@
 			const tronWeb = getTronWeb();
 			const from = value.owner_address ? tronWeb?.address?.fromHex(value.owner_address) : '';
 			const to = value.to_address ? tronWeb?.address?.fromHex(value.to_address) : '';
-			return contract?.type === 'TransferContract' && from === state.wallet && to === CONFIG.DEPOSIT_ADDRESS && Number(value.amount || 0) === CONFIG.PAYMENT_SUN;
+			return contract?.type === 'TransferContract' && from === state.wallet && to === state.network?.depositAddress && Number(value.amount || 0) === CONFIG.PAYMENT_SUN;
 		}
 
 		async function findExistingPayment() {
 			if (!state.wallet || !isConfigured() || state.transactionId) return;
 			try {
 				setStatus('payment-status', 'Scanning', 'warn');
-				const path = '/v1/accounts/' + encodeURIComponent(CONFIG.DEPOSIT_ADDRESS) + '/transactions?only_confirmed=false&limit=50&order_by=block_timestamp,desc';
+				const path = '/v1/accounts/' + encodeURIComponent(state.network.depositAddress) + '/transactions?only_confirmed=false&limit=50&order_by=block_timestamp,desc';
 				const response = await fetchJson(path);
 				const payment = (response.data || []).find(matchesPayment);
 				if (!payment?.txID) {
@@ -299,7 +314,7 @@
 			try {
 				$('pay-button').disabled = true;
 				$('pay-button').textContent = 'Confirm in wallet...';
-				const result = await tronWeb.trx.sendTransaction(CONFIG.DEPOSIT_ADDRESS, CONFIG.PAYMENT_SUN);
+				const result = await tronWeb.trx.sendTransaction(state.network.depositAddress, CONFIG.PAYMENT_SUN);
 				if (!result?.result || !result?.txid) throw new Error('The payment was not accepted by TronLink.');
 				state.transactionId = result.txid;
 				setStatus('payment-status', 'Detecting', 'warn');
@@ -328,7 +343,7 @@
 				const to = value.to_address ? tronWeb?.address?.fromHex(value.to_address) : '';
 				const amount = Number(value.amount || 0);
 				const failedTransaction = info?.receipt?.result && info.receipt.result !== 'SUCCESS';
-				const validPayment = contract?.type === 'TransferContract' && from === state.wallet && to === CONFIG.DEPOSIT_ADDRESS && amount === CONFIG.PAYMENT_SUN && !failedTransaction;
+				const validPayment = contract?.type === 'TransferContract' && from === state.wallet && to === state.network?.depositAddress && amount === CONFIG.PAYMENT_SUN && !failedTransaction;
 				if (!validPayment) throw new Error('The transaction does not match the required 10 TRX payment.');
 				state.transactionBlock = Number(info.blockNumber || 0);
 				const currentBlock = Number(block?.block_header?.raw_data?.number || 0);
@@ -352,7 +367,7 @@
 			}
 		}
 
-		$('deposit-address').textContent = isConfigured() ? CONFIG.DEPOSIT_ADDRESS : 'Operator address required';
+		$('deposit-address').textContent = CONFIG.DEPOSIT_ADDRESS;
 		$('connect-button').addEventListener('click', connectWallet);
 		$('pay-button').addEventListener('click', pay);
 		window.addEventListener('message', (event) => {
