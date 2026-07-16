@@ -88,7 +88,7 @@
 			.hero { gap: 18px; margin-top: 25px; margin-bottom: 28px; }
 			h1 { font-size: clamp(52px, 16vw, 76px); }
 			.wallet-panel { align-items: flex-start; flex-direction: column; }
-			.wallet-panel .button { width: 100%; }
+			  .wallet-panel .button { width: 100%; }
 			.section { padding: 22px; }
 		}
 	</style>
@@ -290,8 +290,9 @@
 				]);
 				const contract = transaction?.raw_data?.contract?.[0];
 				const value = contract?.parameter?.value || {};
-				const from = value.owner_address ? getTronWeb()?.address?.fromHex(value.owner_address) : '';
-				const to = value.to_address ? getTronWeb()?.address?.fromHex(value.to_address) : '';
+				const tronWeb = getTronWeb();
+				const from = value.owner_address ? tronWeb?.address?.fromHex(value.owner_address) : '';
+				const to = value.to_address ? tronWeb?.address?.fromHex(value.to_address) : '';
 				const amount = Number(value.amount || 0);
 				const validPayment = contract?.type === 'TransferContract' && from === state.wallet && to === CONFIG.DEPOSIT_ADDRESS && amount === CONFIG.PAYMENT_SUN && info?.receipt?.result === 'SUCCESS';
 				if (!validPayment) throw new Error('The transaction does not match the required 10 TRX payment.');
