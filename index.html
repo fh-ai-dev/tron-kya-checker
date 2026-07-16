@@ -73,6 +73,7 @@
 		.status-value.good { color: var(--green); }
 		.status-value.warn { color: #a86425; }
 		.status-value.bad { color: var(--coral); }
+		.transaction-link { max-width: 270px; color: var(--green); font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; text-align: right; }
 		.result { margin-top: 22px; padding-top: 26px; border-top: 1px solid var(--line); }
 		.risk { display: flex; justify-content: space-between; align-items: end; gap: 15px; margin-top: 16px; }
 		.risk-score { font-size: 54px; line-height: 1; letter-spacing: -.05em; }
@@ -128,6 +129,7 @@
 					<h2>Your verification status</h2>
 					<div class="status-line"><span>Payment</span><strong class="status-value" id="payment-status">Waiting</strong></div>
 					<div class="status-line"><span>Confirmations</span><strong class="status-value" id="confirmation-status">0 / 12</strong></div>
+					<div class="status-line" id="transaction-row" hidden><span>Transaction</span><a class="transaction-link" id="transaction-link" target="_blank" rel="noopener noreferrer"></a></div>
 					<div class="status-line"><span>Address check</span><strong class="status-value" id="address-status">Locked</strong></div>
 					<div class="status-line"><span>Report</span><strong class="status-value" id="report-status">Wallet required</strong></div>
 					<div class="result" id="result-panel" hidden>
@@ -160,8 +162,8 @@
 
 		function getNetwork(tronWeb) {
 			const host = String(tronWeb?.fullNode?.host || '').toLowerCase();
-			if (host.includes('shasta')) return { key: 'shasta', label: 'SHASTA testnet', apiUrl: 'https://api.shasta.trongrid.io', depositAddress: CONFIG.SHASTA_DEPOSIT_ADDRESS };
-			if (host.includes('api.trongrid.io') || host.includes('api.tronstack.io')) return { key: 'mainnet', label: 'TRON mainnet', apiUrl: CONFIG.TRONGRID_URL, depositAddress: CONFIG.DEPOSIT_ADDRESS };
+			if (host.includes('shasta')) return { key: 'shasta', label: 'SHASTA testnet', apiUrl: 'https://api.shasta.trongrid.io', explorerUrl: 'https://shasta.tronscan.org/#/transaction/', depositAddress: CONFIG.SHASTA_DEPOSIT_ADDRESS };
+			if (host.includes('api.trongrid.io') || host.includes('api.tronstack.io')) return { key: 'mainnet', label: 'TRON mainnet', apiUrl: CONFIG.TRONGRID_URL, explorerUrl: 'https://tronscan.org/#/transaction/', depositAddress: CONFIG.DEPOSIT_ADDRESS };
 			return null;
 		}
 
@@ -169,6 +171,18 @@
 			$('network-badge').textContent = network.label;
 			$('testnet-banner').hidden = network.key !== 'shasta';
 			$('deposit-address').textContent = network.depositAddress || 'Testnet address required';
+		}
+
+		function updateTransactionLink() {
+			const row = $('transaction-row');
+			const link = $('transaction-link');
+			if (!state.transactionId || !state.network) {
+				row.hidden = true;
+				return;
+			}
+			link.href = state.network.explorerUrl + encodeURIComponent(state.transactionId);
+			link.textContent = state.transactionId;
+			row.hidden = false;
 		}
 
 		function showToast(message) {
@@ -297,6 +311,7 @@
 					return;
 				}
 				state.transactionId = payment.txID;
+				updateTransactionLink();
 				$('pay-button').disabled = true;
 				$('pay-button').textContent = 'Payment found';
 				$('status-message').textContent = 'Payment found on TRON. Checking confirmations.';
@@ -317,6 +332,7 @@
 				const result = await tronWeb.trx.sendTransaction(state.network.depositAddress, CONFIG.PAYMENT_SUN);
 				if (!result?.result || !result?.txid) throw new Error('The payment was not accepted by TronLink.');
 				state.transactionId = result.txid;
+				updateTransactionLink();
 				setStatus('payment-status', 'Detecting', 'warn');
 				setStatus('address-status', 'Checking', 'warn');
 				$('status-message').textContent = 'Transaction submitted. Waiting for TRON confirmation data.';
@@ -351,6 +367,8 @@
 				$('confirmation-status').textContent = confirmations + ' / ' + CONFIG.REQUIRED_CONFIRMATIONS;
 				setStatus('payment-status', confirmations >= CONFIG.REQUIRED_CONFIRMATIONS ? 'Confirmed' : 'Confirming', confirmations >= CONFIG.REQUIRED_CONFIRMATIONS ? 'good' : 'warn');
 				if (confirmations >= CONFIG.REQUIRED_CONFIRMATIONS) {
+					window.clearTimeout(state.pollTimer);
+					state.pollTimer = 0;
 					setStatus('address-status', 'Verified', 'good');
 					setStatus('report-status', 'Manual review', 'warn');
 					$('pay-button').textContent = 'Payment confirmed';
