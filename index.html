@@ -221,6 +221,7 @@
 				setStatus('report-status', 'Awaiting payment');
 				$('status-message').textContent = isConfigured() ? 'Send 10 TRX to start the confirmation check.' : 'The receiving address must be configured by the operator before payment is enabled.';
 				await loadResults();
+				await findExistingPayment();
 				renderResult();
 			} catch (error) {
 				showToast(error.message || 'Wallet connection failed.');
@@ -259,6 +260,38 @@
 			return response.json();
 		}
 
+		function matchesPayment(transaction) {
+			const contract = transaction?.raw_data?.contract?.[0];
+			const value = contract?.parameter?.value || {};
+			const tronWeb = getTronWeb();
+			const from = value.owner_address ? tronWeb?.address?.fromHex(value.owner_address) : '';
+			const to = value.to_address ? tronWeb?.address?.fromHex(value.to_address) : '';
+			return contract?.type === 'TransferContract' && from === state.wallet && to === CONFIG.DEPOSIT_ADDRESS && Number(value.amount || 0) === CONFIG.PAYMENT_SUN;
+		}
+
+		async function findExistingPayment() {
+			if (!state.wallet || !isConfigured() || state.transactionId) return;
+			try {
+				setStatus('payment-status', 'Scanning', 'warn');
+				const path = '/v1/accounts/' + encodeURIComponent(CONFIG.DEPOSIT_ADDRESS) + '/transactions?only_confirmed=false&limit=50&order_by=block_timestamp,desc';
+				const response = await fetchJson(path);
+				const payment = (response.data || []).find(matchesPayment);
+				if (!payment?.txID) {
+					setStatus('payment-status', 'Waiting');
+					$('status-message').textContent = 'No matching 10 TRX payment was found for this wallet yet.';
+					return;
+				}
+				state.transactionId = payment.txID;
+				$('pay-button').disabled = true;
+				$('pay-button').textContent = 'Payment found';
+				$('status-message').textContent = 'Payment found on TRON. Checking confirmations.';
+				await pollPayment();
+			} catch (error) {
+				setStatus('payment-status', 'Scan failed', 'bad');
+				$('status-message').textContent = error.message || 'Could not scan recent TRON payments.';
+			}
+		}
+
 		async function pay() {
 			const tronWeb = getTronWeb();
 			if (!state.wallet || !tronWeb) return connectWallet();
@@ -294,7 +327,8 @@
 				const from = value.owner_address ? tronWeb?.address?.fromHex(value.owner_address) : '';
 				const to = value.to_address ? tronWeb?.address?.fromHex(value.to_address) : '';
 				const amount = Number(value.amount || 0);
-				const validPayment = contract?.type === 'TransferContract' && from === state.wallet && to === CONFIG.DEPOSIT_ADDRESS && amount === CONFIG.PAYMENT_SUN && info?.receipt?.result === 'SUCCESS';
+				const failedTransaction = info?.receipt?.result && info.receipt.result !== 'SUCCESS';
+				const validPayment = contract?.type === 'TransferContract' && from === state.wallet && to === CONFIG.DEPOSIT_ADDRESS && amount === CONFIG.PAYMENT_SUN && !failedTransaction;
 				if (!validPayment) throw new Error('The transaction does not match the required 10 TRX payment.');
 				state.transactionBlock = Number(info.blockNumber || 0);
 				const currentBlock = Number(block?.block_header?.raw_data?.number || 0);
