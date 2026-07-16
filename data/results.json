@@ -1,1 +1,10 @@
-{}
+{
+	"TW8MSZat8hDFhWnZiYVatq8Q87xACJnjVj": {
+		"paymentStatus": "confirmed",
+		"addressStatus": "verified",
+		"riskScore": 18,
+		"riskLabel": "low",
+		"reportStatus": "completed",
+		"updatedAt": "2026-07-16T12:00:00Z"
+	}
+}
