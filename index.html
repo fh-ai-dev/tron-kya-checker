@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<meta name="description" content="TRON mainnet payment and manual KYA status checker.">
+	<title>TRON KYA checker</title>
+	<style>
+		:root {
+			--ink: #17221f;
+			--muted: #64736e;
+			--line: #d9e1dc;
+			--paper: #f7faf5;
+			--panel: rgba(255, 255, 255, .86);
+			--green: #0e6b4e;
+			--green-dark: #084735;
+			--lime: #d7ef72;
+			--coral: #e86c4d;
+			--shadow: 0 24px 70px rgba(24, 61, 48, .12);
+		}
+
+		* { box-sizing: border-box; }
+		body {
+			margin: 0;
+			color: var(--ink);
+			background:
+				radial-gradient(circle at 90% 5%, rgba(215, 239, 114, .55), transparent 28rem),
+				linear-gradient(135deg, #f7faf5 0%, #eef5ed 52%, #e8f0e8 100%);
+			font-family: Georgia, 'Times New Roman', serif;
+			min-height: 100vh;
+		}
+		button, input { font: inherit; }
+		button { cursor: pointer; }
+		.shell { width: min(1120px, calc(100% - 40px)); margin: 0 auto; }
+		header { display: flex; justify-content: space-between; align-items: center; padding: 28px 0 34px; }
+		.brand { display: flex; gap: 12px; align-items: center; font-weight: 700; letter-spacing: .03em; }
+		.brand-mark { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; background: var(--green); color: var(--lime); font-size: 19px; }
+		.network { color: var(--green); border: 1px solid #b5cdbd; border-radius: 100px; padding: 8px 13px; font: 700 12px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .08em; text-transform: uppercase; }
+		main { padding-bottom: 70px; }
+		.hero { display: grid; grid-template-columns: 1.15fr .85fr; gap: 30px; align-items: end; margin: 24px 0 46px; }
+		h1 { max-width: 690px; margin: 0; font-size: clamp(48px, 7vw, 88px); line-height: .92; letter-spacing: -.045em; font-weight: 700; }
+		.hero-copy { color: var(--muted); max-width: 390px; margin: 0 0 5px; font: 16px/1.55 ui-sans-serif, system-ui, sans-serif; }
+		.panel { background: var(--panel); border: 1px solid rgba(255,255,255,.8); box-shadow: var(--shadow); border-radius: 18px; }
+		.wallet-panel { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 18px 20px; margin-bottom: 22px; }
+		.wallet-state { display: flex; align-items: center; gap: 11px; font: 14px ui-sans-serif, system-ui, sans-serif; }
+		.dot { width: 9px; height: 9px; border-radius: 50%; background: #aab8b1; }
+		.dot.live { background: #31a66c; box-shadow: 0 0 0 5px rgba(49,166,108,.13); }
+		.wallet-address { color: var(--muted); font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; word-break: break-all; }
+		.button { border: 0; border-radius: 10px; padding: 13px 17px; background: var(--green); color: white; font: 700 13px ui-sans-serif, system-ui, sans-serif; transition: transform .18s, background .18s; }
+		.button:hover:not(:disabled) { background: var(--green-dark); transform: translateY(-1px); }
+		.button:disabled { opacity: .45; cursor: not-allowed; }
+		.content-grid { display: grid; grid-template-columns: .9fr 1.1fr; gap: 22px; }
+		.section { padding: 27px; }
+		.eyebrow { margin: 0 0 9px; color: var(--green); font: 700 11px ui-sans-serif, system-ui, sans-serif; letter-spacing: .13em; text-transform: uppercase; }
+		h2 { margin: 0 0 20px; font-size: 30px; letter-spacing: -.025em; }
+		.payment-card { background: var(--green); color: white; overflow: hidden; position: relative; }
+		.payment-card::after { content: ''; position: absolute; width: 220px; height: 220px; border: 1px solid rgba(215,239,114,.35); border-radius: 50%; right: -90px; bottom: -100px; }
+		.payment-card .eyebrow { color: var(--lime); }
+		.payment-card h2 { max-width: 280px; }
+		.amount { display: flex; align-items: baseline; gap: 9px; margin: 30px 0 25px; }
+		.amount strong { font-size: 66px; line-height: .8; letter-spacing: -.05em; }
+		.amount span { color: var(--lime); font: 700 14px ui-sans-serif, system-ui, sans-serif; }
+		.address-box { background: rgba(0,0,0,.18); border-radius: 10px; padding: 13px; margin-bottom: 16px; }
+		.address-box code { display: block; color: #f5f9e9; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; word-break: break-all; min-height: 18px; }
+		.payment-card .button { position: relative; z-index: 1; width: 100%; background: var(--lime); color: var(--ink); }
+		.payment-card .button:hover:not(:disabled) { background: white; }
+		.form-note { margin: 14px 0 0; color: #b7d4c0; font: 12px/1.5 ui-sans-serif, system-ui, sans-serif; }
+		.status-card { min-height: 100%; }
+		.status-line { display: flex; justify-content: space-between; gap: 20px; padding: 15px 0; border-top: 1px solid var(--line); font: 14px ui-sans-serif, system-ui, sans-serif; }
+		.status-line span:first-child { color: var(--muted); }
+		.status-value { text-align: right; font-weight: 700; }
+		.status-value.good { color: var(--green); }
+		.status-value.warn { color: #a86425; }
+		.status-value.bad { color: var(--coral); }
+		.result { margin-top: 22px; padding-top: 26px; border-top: 1px solid var(--line); }
+		.risk { display: flex; justify-content: space-between; align-items: end; gap: 15px; margin-top: 16px; }
+		.risk-score { font-size: 54px; line-height: 1; letter-spacing: -.05em; }
+		.risk-label { border: 1px solid #b5cdbd; color: var(--green); border-radius: 100px; padding: 8px 12px; font: 700 12px ui-sans-serif, system-ui, sans-serif; text-transform: uppercase; letter-spacing: .08em; }
+		.empty { color: var(--muted); font: 14px/1.6 ui-sans-serif, system-ui, sans-serif; }
+		footer { color: var(--muted); padding: 0 0 28px; font: 12px ui-sans-serif, system-ui, sans-serif; }
+		.toast { position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 20px); opacity: 0; pointer-events: none; max-width: min(500px, calc(100% - 32px)); padding: 13px 17px; border-radius: 10px; background: #17221f; color: white; font: 13px/1.4 ui-sans-serif, system-ui, sans-serif; transition: opacity .2s, transform .2s; z-index: 5; }
+		.toast.visible { opacity: 1; transform: translate(-50%, 0); }
+		.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+		@media (max-width: 760px) {
+			.shell { width: min(100% - 28px, 560px); }
+			header { padding-top: 18px; }
+			.hero, .content-grid { grid-template-columns: 1fr; }
+			.hero { gap: 18px; margin-top: 25px; margin-bottom: 28px; }
+			h1 { font-size: clamp(52px, 16vw, 76px); }
+			.wallet-panel { align-items: flex-start; flex-direction: column; }
+			.wallet-panel .button { width: 100%; }
+			.section { padding: 22px; }
+		}
+	</style>
+</head>
+<body>
+	<div class="shell">
+		<header>
+			<div class="brand"><span class="brand-mark">T</span><span>KYA / CHECKER</span></div>
+			<span class="network">TRON mainnet</span>
+		</header>
+
+		<main>
+			<section class="hero">
+				<h1>Verify the<br><em>address.</em></h1>
+				<p class="hero-copy">A wallet-gated TRON payment flow for manual KYA review. Connect your wallet to begin and keep your payment traceable from confirmation to final risk result.</p>
+			</section>
+
+			<section class="panel wallet-panel" aria-live="polite">
+				<div class="wallet-state"><span class="dot" id="wallet-dot"></span><div><strong id="wallet-state">Wallet not connected</strong><div class="wallet-address" id="wallet-address">Connect TronLink to continue</div></div></div>
+				<button class="button" id="connect-button" type="button">Connect wallet</button>
+			</section>
+
+			<section class="content-grid">
+				<article class="panel section payment-card">
+					<p class="eyebrow">Step 01 / payment</p>
+					<h2>Send the exact amount to the review address.</h2>
+					<div class="amount"><strong>10</strong><span>TRX</span></div>
+					<div class="address-box"><span class="sr-only">Deposit address</span><code id="deposit-address">Not configured</code></div>
+					<button class="button" id="pay-button" type="button" disabled>Connect wallet first</button>
+					<p class="form-note">Payment is checked on TRON mainnet and requires 12 confirmed blocks before review begins.</p>
+				</article>
+
+				<article class="panel section status-card">
+					<p class="eyebrow">Step 02 / review</p>
+					<h2>Your verification status</h2>
+					<div class="status-line"><span>Payment</span><strong class="status-value" id="payment-status">Waiting</strong></div>
+					<div class="status-line"><span>Confirmations</span><strong class="status-value" id="confirmation-status">0 / 12</strong></div>
+					<div class="status-line"><span>Address check</span><strong class="status-value" id="address-status">Locked</strong></div>
+					<div class="status-line"><span>Report</span><strong class="status-value" id="report-status">Wallet required</strong></div>
+					<div class="result" id="result-panel" hidden>
+						<p class="eyebrow">Manual KYA result</p>
+						<div class="risk"><div><div class="empty">Risk score</div><div class="risk-score" id="risk-score">—</div></div><div class="risk-label" id="risk-label">Pending</div></div>
+					</div>
+					<p class="empty" id="status-message">Connect your TRON wallet. Your result is only shown for the connected payment address.</p>
+				</article>
+			</section>
+		</main>
+		<footer>TRON mainnet · 10 TRX · 12 confirmations · Manual KYA reporting</footer>
+	</div>
+	<div class="toast" id="toast" role="status"></div>
+
+	<script>
+		'use strict';
+
+		const CONFIG = Object.freeze({
+			DEPOSIT_ADDRESS: '',
+			PAYMENT_SUN: 10_000_000,
+			REQUIRED_CONFIRMATIONS: 12,
+			RESULTS_URL: './data/results.json',
+			TRONGRID_URL: 'https://api.trongrid.io'
+		});
+
+		const state = { wallet: '', transactionId: '', transactionBlock: 0, pollTimer: 0, results: null };
+		const $ = (id) => document.getElementById(id);
+		const isConfigured = () => /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(CONFIG.DEPOSIT_ADDRESS);
+
+		function showToast(message) {
+			const toast = $('toast');
+			toast.textContent = message;
+			toast.classList.add('visible');
+			window.clearTimeout(showToast.timer);
+			showToast.timer = window.setTimeout(() => toast.classList.remove('visible'), 4200);
+		}
+
+		function setStatus(id, text, tone) {
+			const element = $(id);
+			element.textContent = text;
+			element.className = 'status-value' + (tone ? ' ' + tone : '');
+		}
+
+		function getTronWeb() {
+			return window.tronLink?.tronWeb || window.tronWeb || null;
+		}
+
+		function waitForTronLink(timeout = 2500) {
+			const existing = getTronWeb();
+			if (existing) return Promise.resolve(existing);
+			return new Promise((resolve) => {
+				let settled = false;
+				const finish = () => {
+					if (settled) return;
+					settled = true;
+					window.removeEventListener('tronLink#initialized', finish);
+					window.clearInterval(pollTimer);
+					window.clearTimeout(timeoutTimer);
+					resolve(getTronWeb());
+				};
+				const pollTimer = window.setInterval(() => {
+					if (getTronWeb()) finish();
+				}, 100);
+				const timeoutTimer = window.setTimeout(finish, timeout);
+				window.addEventListener('tronLink#initialized', finish, { once: true });
+			});
+		}
+
+		function isMainnet(tronWeb) {
+			const host = String(tronWeb?.fullNode?.host || '').toLowerCase();
+			return host.includes('api.trongrid.io') || host.includes('api.tronstack.io');
+		}
+
+		async function connectWallet() {
+			try {
+				const injectedTronWeb = await waitForTronLink();
+				if (!injectedTronWeb) {
+					throw new Error('TronLink is unavailable. Install or enable the TronLink browser extension, then open this page on GitHub Pages.');
+				}
+				if (window.tronLink?.request) await window.tronLink.request({ method: 'tron_requestAccounts' });
+				const tronWeb = getTronWeb();
+				const address = tronWeb?.defaultAddress?.base58;
+				if (!address) throw new Error('No active wallet address was returned.');
+				if (!isMainnet(tronWeb)) throw new Error('Switch TronLink to TRON mainnet before continuing.');
+				state.wallet = address;
+				$('wallet-dot').classList.add('live');
+				$('wallet-state').textContent = 'Wallet connected';
+				$('wallet-address').textContent = address;
+				$('connect-button').textContent = 'Wallet connected';
+				$('pay-button').disabled = !isConfigured();
+				$('pay-button').textContent = isConfigured() ? 'Pay 10 TRX' : 'Receiving address not configured';
+				setStatus('address-status', 'Ready', 'good');
+				setStatus('report-status', 'Awaiting payment');
+				$('status-message').textContent = isConfigured() ? 'Send 10 TRX to start the confirmation check.' : 'The receiving address must be configured by the operator before payment is enabled.';
+				await loadResults();
+				renderResult();
+			} catch (error) {
+				showToast(error.message || 'Wallet connection failed.');
+			}
+		}
+
+		async function loadResults() {
+			try {
+				const response = await fetch(CONFIG.RESULTS_URL, { cache: 'no-store' });
+				if (!response.ok) throw new Error('Results unavailable');
+				state.results = await response.json();
+			} catch (_) {
+				state.results = {};
+			}
+		}
+
+		function renderResult() {
+			if (!state.wallet || !state.results) return;
+			const record = state.results[state.wallet];
+			if (!record) {
+				$('result-panel').hidden = true;
+				if (!state.transactionId) $('status-message').textContent = 'No manual KYA result is available for this wallet yet.';
+				return;
+			}
+			$('result-panel').hidden = false;
+			$('risk-score').textContent = record.riskScore ?? '—';
+			$('risk-label').textContent = record.riskLabel || 'Pending';
+			setStatus('address-status', record.addressStatus === 'verified' ? 'Verified' : (record.addressStatus || 'Pending'), record.addressStatus === 'verified' ? 'good' : 'warn');
+			setStatus('report-status', record.reportStatus || 'Pending', record.reportStatus === 'completed' ? 'good' : 'warn');
+			$('status-message').textContent = 'This result belongs to the currently connected payment address.';
+		}
+
+		async function fetchJson(path, options) {
+			const response = await fetch(CONFIG.TRONGRID_URL + path, options);
+			if (!response.ok) throw new Error('TRON network request failed.');
+			return response.json();
+		}
+
+		async function pay() {
+			const tronWeb = getTronWeb();
+			if (!state.wallet || !tronWeb) return connectWallet();
+			if (!isConfigured()) return showToast('Operator configuration is incomplete: add the fixed receiving address.');
+			try {
+				$('pay-button').disabled = true;
+				$('pay-button').textContent = 'Confirm in wallet...';
+				const result = await tronWeb.trx.sendTransaction(CONFIG.DEPOSIT_ADDRESS, CONFIG.PAYMENT_SUN);
+				if (!result?.result || !result?.txid) throw new Error('The payment was not accepted by TronLink.');
+				state.transactionId = result.txid;
+				setStatus('payment-status', 'Detecting', 'warn');
+				setStatus('address-status', 'Checking', 'warn');
+				$('status-message').textContent = 'Transaction submitted. Waiting for TRON confirmation data.';
+				pollPayment();
+			} catch (error) {
+				$('pay-button').disabled = false;
+				$('pay-button').textContent = 'Pay 10 TRX';
+				showToast(error.message || 'Payment failed or was cancelled.');
+			}
+		}
+
+		async function pollPayment() {
+			if (!state.transactionId) return;
+			try {
+				const [transaction, info, block] = await Promise.all([
+					fetchJson('/wallet/gettransactionbyid?value=' + encodeURIComponent(state.transactionId)),
+					fetchJson('/wallet/gettransactioninfobyid?value=' + encodeURIComponent(state.transactionId)),
+					fetchJson('/wallet/getnowblock')
+				]);
+				const contract = transaction?.raw_data?.contract?.[0];
+				const value = contract?.parameter?.value || {};
+				const from = value.owner_address ? getTronWeb()?.address?.fromHex(value.owner_address) : '';
+				const to = value.to_address ? getTronWeb()?.address?.fromHex(value.to_address) : '';
+				const amount = Number(value.amount || 0);
+				const validPayment = contract?.type === 'TransferContract' && from === state.wallet && to === CONFIG.DEPOSIT_ADDRESS && amount === CONFIG.PAYMENT_SUN && info?.receipt?.result === 'SUCCESS';
+				if (!validPayment) throw new Error('The transaction does not match the required 10 TRX payment.');
+				state.transactionBlock = Number(info.blockNumber || 0);
+				const currentBlock = Number(block?.block_header?.raw_data?.number || 0);
+				const confirmations = Math.max(0, currentBlock - state.transactionBlock + 1);
+				$('confirmation-status').textContent = confirmations + ' / ' + CONFIG.REQUIRED_CONFIRMATIONS;
+				setStatus('payment-status', confirmations >= CONFIG.REQUIRED_CONFIRMATIONS ? 'Confirmed' : 'Confirming', confirmations >= CONFIG.REQUIRED_CONFIRMATIONS ? 'good' : 'warn');
+				if (confirmations >= CONFIG.REQUIRED_CONFIRMATIONS) {
+					setStatus('address-status', 'Verified', 'good');
+					setStatus('report-status', 'Manual review', 'warn');
+					$('pay-button').textContent = 'Payment confirmed';
+					$('status-message').textContent = 'Payment confirmed. The KYA report will appear after manual review.';
+					await loadResults();
+					renderResult();
+					return;
+				}
+				state.pollTimer = window.setTimeout(pollPayment, 15_000);
+			} catch (error) {
+				setStatus('payment-status', 'Check failed', 'bad');
+				$('status-message').textContent = error.message || 'Could not verify this transaction yet.';
+				state.pollTimer = window.setTimeout(pollPayment, 20_000);
+			}
+		}
+
+		$('deposit-address').textContent = isConfigured() ? CONFIG.DEPOSIT_ADDRESS : 'Operator address required';
+		$('connect-button').addEventListener('click', connectWallet);
+		$('pay-button').addEventListener('click', pay);
+		window.addEventListener('message', (event) => {
+			if (event.data?.message === 'accountsChanged') connectWallet();
+		});
+	</script>
+</body>
+</html>
