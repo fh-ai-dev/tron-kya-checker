@@ -364,7 +364,8 @@
 				state.transactionBlock = Number(info.blockNumber || 0);
 				const currentBlock = Number(block?.block_header?.raw_data?.number || 0);
 				const confirmations = Math.max(0, currentBlock - state.transactionBlock + 1);
-				$('confirmation-status').textContent = confirmations + ' / ' + CONFIG.REQUIRED_CONFIRMATIONS;
+				const displayedConfirmations = Math.min(confirmations, CONFIG.REQUIRED_CONFIRMATIONS);
+				$('confirmation-status').textContent = displayedConfirmations + ' / ' + CONFIG.REQUIRED_CONFIRMATIONS;
 				setStatus('payment-status', confirmations >= CONFIG.REQUIRED_CONFIRMATIONS ? 'Confirmed' : 'Confirming', confirmations >= CONFIG.REQUIRED_CONFIRMATIONS ? 'good' : 'warn');
 				if (confirmations >= CONFIG.REQUIRED_CONFIRMATIONS) {
 					window.clearTimeout(state.pollTimer);
